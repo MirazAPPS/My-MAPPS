@@ -15,8 +15,8 @@ jobs:
 
       - name: Unzip project automatically
         run: |
-          unzip -o *.zip
-          for d in */; do
+          unzip -o *.zip || true
+          for d in */ ; do
             if [ -f "${d}package.json" ]; then
               mv "${d}"* . 2>/dev/null || true
               mv "${d}".* . 2>/dev/null || true
@@ -32,10 +32,12 @@ jobs:
         run: npm install --force
 
       - name: Build Web Assets
-        run: npm run build
+        run: npm run build --if-present
 
-      - name: Sync Capacitor
-        run: npx cap sync android || true
+      - name: Add and Sync Capacitor Android
+        run: |
+          npx cap add android || true
+          npx cap sync android
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -47,6 +49,9 @@ jobs:
         run: |
           if [ -d "android" ]; then
             cd android
+            if [ ! -f "gradlew" ]; then
+              gradle wrapper
+            fi
             chmod +x gradlew
             ./gradlew assembleDebug --stacktrace
           else
