@@ -31,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install --force
-          npm install @capacitor/cli @capacitor/core @capacitor/android @capacitor/assets --force
+          npm install @capacitor/cli @capacitor/core @capacitor/android --force
 
       - name: Build Web Project
         run: |
@@ -59,11 +59,18 @@ jobs:
           EOF
           npx cap add android
 
-          # Automatically set the uploaded icon
-          if [ -f "icon.png" ] || [ -f "assets/icon.png" ]; then
-            mkdir -p assets
-            [ -f "icon.png" ] && cp icon.png assets/icon.png
-            npx cap-assets generate --android || true
+          # Manually inject icon into Android mipmap directories if icon.png exists
+          if [ -f "icon.png" ]; then
+            echo "Injecting custom app icon..."
+            RES_DIR="android/app/src/main/res"
+            
+            # Create mipmap folders and copy icon with various launcher names
+            for size in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+              mkdir -p "$RES_DIR/mipmap-$size"
+              cp icon.png "$RES_DIR/mipmap-$size/ic_launcher.png"
+              cp icon.png "$RES_DIR/mipmap-$size/ic_launcher_round.png"
+              cp icon.png "$RES_DIR/mipmap-$size/ic_launcher_foreground.png"
+            done
           fi
 
           npx cap copy android
