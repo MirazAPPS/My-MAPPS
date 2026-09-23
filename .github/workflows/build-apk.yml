@@ -1,104 +1,78 @@
-name: Build Android APK
+import React, { useState } from 'react';
+import { db } from './firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+export default function MobileRecharge({ currentUser, userBalance, userPin }) {
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [amount, setAmount] = useState('');
+  const [pin, setPin] = useState('');
+  const [loading, setLoading] = useState(false);
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+  const handleRecharge = async (e) => {
+    e.preventDefault();
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    // ১. ৪ সংখ্যার পিন যাচাই
+    if (pin !== userPin) {
+      alert('ভুল পিন দিয়েছেন! সঠিক ৪ সংখ্যার পিন দিন।');
+      return;
+    }
 
-      - name: Extract zip if present
-        run: |
-          unzip -o *.zip || true
-          for d in */ ; do
-            if [ -f "${d}package.json" ]; then
-              mv "${d}"* . 2>/dev/null || true
-              mv "${d}".* . 2>/dev/null || true
-            fi
-          done
+    // ২. পর্যাপ্ত ব্যালেন্স আছে কিনা চেক
+    const rechargeAmount = Number(amount);
+    if (userBalance < rechargeAmount) {
+      alert('আপনার অ্যাকাউন্টে পর্যাপ্ত ব্যালেন্স নেই!');
+      return;
+    }
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+    setLoading(true);
+    try {
+      // ৩. অ্যাডমিন প্যানেলে রিচার্জ রিকোয়েস্ট পাঠানো
+      await addDoc(collection(db, 'rechargeRequests'), {
+        userId: currentUser?.uid || 'guest',
+        userEmail: currentUser?.email || 'N/A',
+        phoneNumber: phoneNumber,
+        amount: rechargeAmount,
+        status: 'pending', // অ্যাডমিন প্যানেলে পেন্ডিং দেখাবে
+        createdAt: serverTimestamp()
+      });
 
-      - name: Install Dependencies
-        run: |
-          npm install --force
-          npm install @capacitor/cli @capacitor/core @capacitor/android --force
+      alert('মোবাইল রিচার্জ রিকোয়েস্ট সফলভাবে অ্যাডমিন প্যানেলে পাঠানো হয়েছে।');
+      setPhoneNumber('');
+      setAmount('');
+      setPin('');
+    } catch (error) {
+      console.error('Recharge Error: ', error);
+      alert('রিচার্জ রিকোয়েস্ট পাঠাতে সমস্যা হয়েছে।');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      - name: Build Web Project
-        run: |
-          npm run build --if-present || true
-          if [ -d "dist" ]; then
-            echo "WEB_DIR=dist" >> $GITHUB_ENV
-          elif [ -d "build" ]; then
-            echo "WEB_DIR=build" >> $GITHUB_ENV
-          else
-            mkdir -p www
-            echo '<!DOCTYPE html><html><head><title>App</title></head><body><h1>App Loaded</h1></body></html>' > www/index.html
-            echo "WEB_DIR=www" >> $GITHUB_ENV
-          fi
+  return (
+    <div style={{ padding: '20px', maxWidth: '400px', margin: 'auto' }}>
+      <h2>মোবাইল রিচার্জ</h2>
+      <p><b>বর্তমান ব্যালেন্স:</b> ৳ {userBalance}</p>
 
-      - name: Setup Capacitor Configuration & Android
-        run: |
-          rm -rf android
-          cat <<EOF > capacitor.config.json
-          {
-            "appId": "com.mirazapps.mymapps",
-            "appName": "M APPS",
-            "webDir": "${{ env.WEB_DIR }}",
-            "bundledWebRuntime": false
-          }
-          EOF
-          npx cap add android
+      <form onSubmit={handleRecharge}>
+        <div style={{ marginTop: '10px' }}>
+          <label>মোবাইল নম্বর:</label>
+          <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="017xxxxxxxx" required />
+        </div>
 
-          # Manually inject icon into Android mipmap directories if icon.png exists
-          if [ -f "icon.png" ]; then
-            echo "Injecting custom app icon..."
-            RES_DIR="android/app/src/main/res"
-            
-            # Create mipmap folders and copy icon with various launcher names
-            for size in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-              mkdir -p "$RES_DIR/mipmap-$size"
-              cp icon.png "$RES_DIR/mipmap-$size/ic_launcher.png"
-              cp icon.png "$RES_DIR/mipmap-$size/ic_launcher_round.png"
-              cp icon.png "$RES_DIR/mipmap-$size/ic_launcher_foreground.png"
-            done
-          fi
+        <div style={{ marginTop: '10px' }}>
+          <label>টাকার পরিমাণ:</label>
+          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="অ্যামাউন্ট লিখুন" required />
+        </div>
 
-          npx cap copy android
-          npx cap sync android
+        <div style={{ marginTop: '10px' }}>
+          <label>৪ সংখ্যার সিক্রেট পিন (PIN):</label>
+          <input type="password" maxLength="4" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="****" required />
+        </div>
 
-          # Fix Kotlin duplicate class conflict
-          echo "
-          configurations.all {
-              exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
-              exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
-          }
-          " >> android/app/build.gradle
-
-      - name: Setup Java JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-
-      - name: Build Android APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          
+        <button type="submit" disabled={loading} style={{ marginTop: '15px', width: '100%', padding: '10px' }}>
+          {loading ? 'প্রসেসিং...' : 'রিচার্জ কনফার্ম করুন'}
+        </button>
+      </form>
+    </div>
+  );
+}
