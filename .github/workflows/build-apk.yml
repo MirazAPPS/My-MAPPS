@@ -31,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install --force
-          npm install @capacitor/cli @capacitor/core @capacitor/android --force
+          npm install @capacitor/cli @capacitor/core @capacitor/android @capacitor/assets --force
 
       - name: Build Web Project
         run: |
@@ -52,16 +52,24 @@ jobs:
           cat <<EOF > capacitor.config.json
           {
             "appId": "com.mirazapps.mymapps",
-            "appName": "MyMAPPS",
+            "appName": "M APPS",
             "webDir": "${{ env.WEB_DIR }}",
             "bundledWebRuntime": false
           }
           EOF
           npx cap add android
+
+          # Automatically set the uploaded icon
+          if [ -f "icon.png" ] || [ -f "assets/icon.png" ]; then
+            mkdir -p assets
+            [ -f "icon.png" ] && cp icon.png assets/icon.png
+            npx cap-assets generate --android || true
+          fi
+
           npx cap copy android
           npx cap sync android
-          
-          # Fix Kotlin Duplicate Class Conflict
+
+          # Fix Kotlin duplicate class conflict
           echo "
           configurations.all {
               exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
