@@ -1,0 +1,62 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Unzip project automatically
+        run: |
+          unzip -o *.zip
+          for d in */; do
+            if [ -f "${d}package.json" ]; then
+              mv "${d}"* . 2>/dev/null || true
+              mv "${d}".* . 2>/dev/null || true
+            fi
+          done
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --force
+
+      - name: Build Web Assets
+        run: npm run build
+
+      - name: Sync Capacitor
+        run: npx cap sync android || true
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Build Android APK
+        run: |
+          if [ -d "android" ]; then
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            echo "Android folder not found!"
+            exit 1
+          fi
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          
