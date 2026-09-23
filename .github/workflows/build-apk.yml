@@ -33,17 +33,22 @@ jobs:
           npm install --force
           npm install @capacitor/cli @capacitor/core @capacitor/android --force
 
-      - name: Build Web Assets
+      - name: Clean stale local build files
         run: |
-          npm run build || true
-          mkdir -p dist
-          mkdir -p www
+          rm -rf node_modules/.cache
+          rm -rf dist www build
+          rm -rf android/.gradle android/build android/app/build android/app/.gradle
+
+      - name: Build Web Assets
+        run: npm run build --if-present
 
       - name: Add and Sync Capacitor Android
         run: |
-          npx cap add android || true
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
           npx cap copy android || true
-          npx cap sync android || true
+          npx cap sync android
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
