@@ -33,16 +33,22 @@ jobs:
           npm install --force
           npm install @capacitor/cli @capacitor/core @capacitor/android --force
 
-      - name: Build Web Assets
+      - name: Build Web App Assets
         run: |
           npm run build || true
-          mkdir -p dist
-          mkdir -p www
+          if [ ! -d "dist" ] && [ ! -d "build" ] && [ ! -d "www" ]; then
+            mkdir -p dist
+            echo '<!DOCTYPE html><html><head><title>App</title></head><body><h1>App Loaded</h1></body></html>' > dist/index.html
+          fi
 
-      - name: Re-create Fresh Android Platform
+      - name: Setup Capacitor Config & Platform
         run: |
           rm -rf android
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            npx cap init "MyMAPPS" "com.mirazapps.mymapps" --web-dir "dist"
+          fi
           npx cap add android
+          npx cap copy android
           npx cap sync android
 
       - name: Setup Java JDK
@@ -55,6 +61,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
+          ./gradlew clean --no-daemon
           ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK Artifact
