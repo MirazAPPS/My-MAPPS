@@ -33,21 +33,16 @@ jobs:
           npm install --force
           npm install @capacitor/cli @capacitor/core @capacitor/android --force
 
-      - name: Clean stale local build files
-        run: |
-          rm -rf node_modules/.cache
-          rm -rf dist www build
-          rm -rf android/.gradle android/build android/app/build android/app/.gradle
-
       - name: Build Web Assets
-        run: npm run build --if-present
-
-      - name: Add and Sync Capacitor Android
         run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          fi
-          npx cap copy android || true
+          npm run build || true
+          mkdir -p dist
+          mkdir -p www
+
+      - name: Re-create Fresh Android Platform
+        run: |
+          rm -rf android
+          npx cap add android
           npx cap sync android
 
       - name: Setup Java JDK
@@ -58,19 +53,9 @@ jobs:
 
       - name: Build Android APK
         run: |
-          if [ -d "android" ]; then
-            cd android
-            chmod +x gradlew || true
-            if [ ! -f "gradlew" ]; then
-              gradle wrapper
-              chmod +x gradlew
-            fi
-            ./gradlew clean --no-daemon
-            ./gradlew assembleDebug --no-daemon --stacktrace
-          else
-            echo "Android folder not found!"
-            exit 1
-          fi
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
