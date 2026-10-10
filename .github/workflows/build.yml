@@ -13,43 +13,61 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install Image Processing Tools
-        run: sudo apt-get install -y imagemagick
-
       - name: Auto Find and Set Logo
         run: |
-          echo "Looking for any new image file in src/assets or root..."
-          
-          # তৈরি করা নিশ্চিত হতে ফোল্ডার চেক
-          mkdir -p src/assets
+          node -e '
+          const fs = require("fs");
+          const path = require("path");
 
-          # যেকোনো png, jpg, jpeg ছবি খুঁজে বের করার কমান্ড
-          FOUND_IMAGE=$(find . -maxdepth 3 -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) ! -path "*/node_modules/*" ! -path "*/.git/*" | head -n 1)
+          function findImage(dir) {
+            if (!fs.existsSync(dir)) return null;
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+              const fullPath = path.join(dir, file);
+              const stat = fs.statSync(fullPath);
+              if (stat.isDirectory()) {
+                if (file !== "node_modules" && file !== ".git" && file !== "dist") {
+                  const res = findImage(fullPath);
+                  if (res) return res;
+                }
+              } else if (/\.(png|jpg|jpeg)$/i.test(file)) {
+                return fullPath;
+              }
+            }
+            return null;
+          }
 
-          if [ -n "$FOUND_IMAGE" ]; then
-            echo "Found logo image: $FOUND_IMAGE"
-            # ছবিটিকে প্রসেস করে অটোমেটিক logo.png হিসেবে বসিয়ে দেওয়া
-            convert "$FOUND_IMAGE" -resize 512x512! src/assets/logo.png
-            echo "Logo automatically set to src/assets/logo.png"
-          else
-            echo "No image found, using default fallback if available."
-          fi
+          const targetDir = path.join(process.cwd(), "src", "assets");
+          if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+          }
+
+          const found = findImage(process.cwd());
+          if (found) {
+            console.log("Found logo image at:", found);
+            const targetPath = path.join(targetDir, "logo.png");
+            fs.copyFileSync(found, targetPath);
+            console.log("Successfully copied logo to:", targetPath);
+          } else {
+            console.log("No logo image found in repo.");
+          }
+          '
 
       - name: Install Dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps || npm install
 
-      - name: Build Web / React Project
+      - name: Build Web Project
         run: npm run build
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: app-dist-files
           path: dist/
