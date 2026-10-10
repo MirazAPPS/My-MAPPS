@@ -1,0 +1,60 @@
+name: Build App from Zip
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unzip and Build Project
+        run: |
+          echo "Looking for zip file..."
+          ZIP_FILE=$(find . -name "*.zip" | head -n 1)
+          
+          if [ -z "$ZIP_FILE" ]; then
+            echo "Error: No zip file found in the repository!"
+            exit 1
+          fi
+          
+          echo "Found zip file: $ZIP_FILE"
+          
+          # Create a build directory and extract zip there
+          mkdir -p extracted_project
+          unzip -q "$ZIP_FILE" -d extracted_project/
+          
+          # Find where package.json is inside extracted files
+          PKG_PATH=$(find extracted_project -name "package.json" -not -path "*/node_modules/*" | head -n 1)
+          
+          if [ -z "$PKG_PATH" ]; then
+            echo "Error: package.json not found inside the zip file!"
+            exit 1
+          fi
+          
+          PROJ_DIR=$(dirname "$PKG_PATH")
+          echo "Project directory is: $PROJ_DIR"
+          cd "$PROJ_DIR"
+          
+          npm install
+          npm run build
+          
+          # Prepare dist for artifact upload
+          mkdir -p ../../dist
+          cp -r dist/* ../../dist/
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-dist-files
+          path: dist/
+          
