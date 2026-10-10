@@ -44,7 +44,21 @@ jobs:
             return null;
           }
 
-          const targetDir = path.join(process.cwd(), "src", "assets");
+          function findPkgDir(dir) {
+            if (fs.existsSync(path.join(dir, "package.json"))) return dir;
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+              const fullPath = path.join(dir, file);
+              if (fs.statSync(fullPath).isDirectory() && file !== "node_modules" && file !== ".git") {
+                const res = findPkgDir(fullPath);
+                if (res) return res;
+              }
+            }
+            return dir;
+          }
+
+          const projectDir = findPkgDir(process.cwd());
+          const targetDir = path.join(projectDir, "src", "assets");
           if (!fs.existsSync(targetDir)) {
             fs.mkdirSync(targetDir, { recursive: true });
           }
@@ -60,15 +74,27 @@ jobs:
           }
           '
 
-      - name: Install Dependencies
-        run: npm install --legacy-peer-deps || npm install
-
-      - name: Build Web Project
-        run: npm run build
+      - name: Build and Install Project
+        run: |
+          # package.json ফাইল কোথায় আছে তা খুঁজে বের করা
+          PROJECT_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \;)
+          echo "Project directory found at: $PROJECT_DIR"
+          cd "$PROJECT_DIR"
+          
+          # ডিপেন্ডেন্সি ইনস্টল ও বিল্ড করা
+          npm install --legacy-peer-deps || npm install
+          npm run build
+          
+          # dist ফোল্ডারটিকে মূল ডিরেক্টরিতে নিয়ে আসা
+          if [ "$PROJECT_DIR" != "." ]; then
+            cp -r dist ../ || true
+          fi
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: app-dist-files
-          path: dist/
-          
+          path: |
+            dist/
+            **/dist/
+            
