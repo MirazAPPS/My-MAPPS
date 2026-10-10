@@ -1,59 +1,55 @@
-name: Build App from Zip
+name: Auto Detect Logo and Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - master
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: 18
 
-      - name: Unzip and Build Project
+      - name: Install Image Processing Tools
+        run: sudo apt-get install -y imagemagick
+
+      - name: Auto Find and Set Logo
         run: |
-          echo "Looking for zip file..."
-          ZIP_FILE=$(find . -name "*.zip" | head -n 1)
+          echo "Looking for any new image file in src/assets or root..."
           
-          if [ -z "$ZIP_FILE" ]; then
-            echo "Error: No zip file found in the repository!"
-            exit 1
-          fi
-          
-          echo "Found zip file: $ZIP_FILE"
-          
-          # Create a build directory and extract zip there
-          mkdir -p extracted_project
-          unzip -q "$ZIP_FILE" -d extracted_project/
-          
-          # Find where package.json is inside extracted files
-          PKG_PATH=$(find extracted_project -name "package.json" -not -path "*/node_modules/*" | head -n 1)
-          
-          if [ -z "$PKG_PATH" ]; then
-            echo "Error: package.json not found inside the zip file!"
-            exit 1
-          fi
-          
-          PROJ_DIR=$(dirname "$PKG_PATH")
-          echo "Project directory is: $PROJ_DIR"
-          cd "$PROJ_DIR"
-          
-          npm install
-          npm run build
-          
-          # Prepare dist for artifact upload
-          mkdir -p ../../dist
-          cp -r dist/* ../../dist/
+          # তৈরি করা নিশ্চিত হতে ফোল্ডার চেক
+          mkdir -p src/assets
 
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
+          # যেকোনো png, jpg, jpeg ছবি খুঁজে বের করার কমান্ড
+          FOUND_IMAGE=$(find . -maxdepth 3 -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) ! -path "*/node_modules/*" ! -path "*/.git/*" | head -n 1)
+
+          if [ -n "$FOUND_IMAGE" ]; then
+            echo "Found logo image: $FOUND_IMAGE"
+            # ছবিটিকে প্রসেস করে অটোমেটিক logo.png হিসেবে বসিয়ে দেওয়া
+            convert "$FOUND_IMAGE" -resize 512x512! src/assets/logo.png
+            echo "Logo automatically set to src/assets/logo.png"
+          else
+            echo "No image found, using default fallback if available."
+          fi
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Web / React Project
+        run: npm run build
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
         with:
           name: app-dist-files
           path: dist/
